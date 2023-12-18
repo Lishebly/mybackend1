@@ -105,7 +105,9 @@ def get_user_info(request):
         # 处理其他异常
         return JsonResponse({'error': str(e)}, status=400)
 
-
+@require_GET
+def getrow(request):
+    return JsonResponse( {'url': baseurl + f"{settings.STATIC_URL}arrow.png"})
 
 @require_POST
 @csrf_exempt
@@ -174,6 +176,7 @@ def task_publish(request):
         # 获取前端传递过来的任务数据
 
         data = json.loads(request.body)
+        title=data.get('title','')
         description = data.get('description', '')
         phone = data.get('phone', '')
         reward = data.get('reward', '')
@@ -185,6 +188,7 @@ def task_publish(request):
 
         # 创建任务
         task = Task.objects.create(
+            title=title,
             description=description,
             ex_phone_number=phone,
             reward=reward,
@@ -198,7 +202,7 @@ def task_publish(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
-
+@csrf_exempt
 def show_task_by_id(request):
     try:
         data = json.loads(request.body)
@@ -210,9 +214,8 @@ def show_task_by_id(request):
         task = Task.objects.get(id=task_id)
 
         # 获取任务相关的用户信息
-        creator_info = {'nickname': task.creator.nickname, 'phone': task.creator.phone_number}
+        creator_info = {'nickname': task.creator.nickname, 'phone': task.creator.phone_number,'openid':task.creator.openid}
         assignee_info = {'nickname': '', 'phone': ''}
-
         if task.assignee:
             assignee_info = {'nickname': task.assignee.nickname, 'phone': task.assignee.phone_number}
 
@@ -223,6 +226,7 @@ def show_task_by_id(request):
             'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
             'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
             'status': task.status,
+            'reward': task.reward,
             'description': task.description,
             'creator': creator_info,
             'assignee': assignee_info,
@@ -234,3 +238,139 @@ def show_task_by_id(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
+@require_GET
+def show_pending_tasks(request):
+    # 获取所有状态为 'pending' 的任务
+    pending_tasks = Task.objects.filter(status='pending')
+
+    # 将任务数据转换为 JSON 格式
+    tasks_data=[]
+    for task in pending_tasks:
+        c_usr=CustomUser.objects.get(id=task.creator_id)
+        tmp={
+            'id': task.id,
+            'description': task.description,
+            'reward': str(task.reward),  # 使用字符串表示 decimal 字段
+            'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': task.status,
+            'assignee_id': task.assignee_id,
+            'creator_id': task.creator_id,
+            'creator_name': c_usr.nickname,
+            'ex_phone_number': task.ex_phone_number,
+            'title': task.title,
+        }
+        tasks_data.append(tmp)
+    # 返回 JSON 响应
+    return JsonResponse({'pending_tasks': tasks_data})
+@csrf_exempt
+def receive(request):
+    try:
+        data = json.loads(request.body)
+
+        task_id = data.get('id', '')
+
+        # 获取任务信息
+        task = Task.objects.get(id=task_id)
+        status_info=task.status
+        if status_info=='pending':
+            task.status= 'in_progress'
+            task.save()
+            response_data={'res':'success','status':task.status}
+            return JsonResponse(response_data)
+        else:
+            response_data = {'res': 'fail','status':task.status}
+            return JsonResponse(response_data)
+    except Task.DoesNotExist:
+        return JsonResponse({'error': '任务不存在'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt#修改用户信息
+def revise(request):
+    try:
+        data = json.loads(request.body)
+        avatar=data.get('avatar','')
+        name=data.get('nickname','')
+        phone=data.get('phone_number','')
+        openid = data.get('openid', '')
+        user=CustomUser.objects.get(openid=openid)
+        if avatar:
+            user.avatar=avatar
+        if name:
+            user.nickname=name
+        if phone:
+            user.phone_number=phone
+        user.save()
+        return JsonResponse({'res':'success'})
+
+
+    except Task.DoesNotExist:
+        return JsonResponse({'error': '任务不存在'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+def my_publish_tasks(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
+
+    openid=data.get('openid','')
+    usr=CustomUser.objects.get(openid=openid)
+    usr_id=usr.id
+    tasks=Task.objects.filter(creator_id=usr_id)
+    grouped_tasks_data = {'pending': [], 'in_progress': [], 'completed': []}
+    for task in tasks:
+        usr_a = CustomUser.objects.filter(id=task.assignee_id).first()
+        tmp = {
+            'id': task.id,
+            'description': task.description,
+            'reward': str(task.reward),  # 使用字符串表示 decimal 字段
+            'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': task.status,
+            'assignee_id': task.assignee_id,
+            'assignee_name': usr_a.nickname if usr_a else '',
+            'creator_id': task.creator_id,
+            'creator_name': usr.nickname,
+            'ex_phone_number': task.ex_phone_number,
+            'title': task.title,
+        }
+        grouped_tasks_data[task.status].append(tmp)
+
+
+    # 返回 JSON 响应
+    return JsonResponse(grouped_tasks_data)
+
+@csrf_exempt
+def my_receive_tasks(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
+
+    openid = data.get('openid', '')
+    usr = CustomUser.objects.get(openid=openid)
+    usr_id = usr.id
+    tasks = Task.objects.filter(assignee_id=usr_id)
+    grouped_tasks_data = {'pending': [], 'in_progress': [], 'completed': []}
+    for task in tasks:
+        usr_c = CustomUser.objects.filter(id=task.creator_id).first()
+        tmp = {
+            'id': task.id,
+            'description': task.description,
+            'reward': str(task.reward),  # 使用字符串表示 decimal 字段
+            'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': task.status,
+            'creator_id': task.creator_id,
+            'creator_name': usr_c.nickname,
+            'ex_phone_number': task.ex_phone_number,
+            'title': task.title,
+        }
+        grouped_tasks_data[task.status].append(tmp)
+
+    # 返回 JSON 响应
+    return JsonResponse(grouped_tasks_data)

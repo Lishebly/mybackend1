@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "daifuwu.apps.DaifuwuConfig",
     'rest_framework',
     'rest_framework_simplejwt',
+
 ]
 
 MIDDLEWARE = [

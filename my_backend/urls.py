@@ -9,12 +9,19 @@ urlpatterns = [
     path('show/lunbo',backend.lunbo),
     path('show/silan',backend.shouyesilan),
     path('show/logo',backend.showlogo),
+    path('show/getrow',backend.getrow),
     path('loginByWeixin',backend.wx_login),
     path('get/userinfo',backend.get_user_info),
     path('change/usr_info',backend.upload_usr_info),
     path('upload/uploadImages',backend.upload_images),
     path('task/publish',backend.task_publish),
-    path('task/show_task_by_id',backend.show_task_by_id)
+    path('task/show_task_by_id',backend.show_task_by_id),
+    path('task/show_pending_tasks',backend.show_pending_tasks),
+    path('task/receive',backend.receive),
+    path('task/revise',backend.revise),
+    path('task/show_my_publish_tasks',backend.my_publish_tasks),
+    path('task/show_my_receive_tasks',backend.my_receive_tasks),
+
 ]
 
 # 添加以下两行以处理静态文件
