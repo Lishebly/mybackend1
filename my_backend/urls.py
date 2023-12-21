@@ -16,11 +16,15 @@ urlpatterns = [
     path('upload/uploadImages',backend.upload_images),
     path('task/publish',backend.task_publish),
     path('task/show_task_by_id',backend.show_task_by_id),
+    path('task/search_by_key',backend.search_by_key),
+    path('home/',backend.home),
     path('task/show_pending_tasks',backend.show_pending_tasks),
     path('task/receive',backend.receive),
     path('task/revise',backend.revise),
     path('task/show_my_publish_tasks',backend.my_publish_tasks),
     path('task/show_my_receive_tasks',backend.my_receive_tasks),
+    path('task/show_all_about_melist',backend.show_about_me_tasklist),
+    path('message/history',backend.get_history_messages),
 
 ]
 

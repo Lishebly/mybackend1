@@ -22,7 +22,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
 
 # 小程序本地所需要的图片资源
-STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
@@ -43,6 +42,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -53,7 +53,7 @@ INSTALLED_APPS = [
     "daifuwu.apps.DaifuwuConfig",
     'rest_framework',
     'rest_framework_simplejwt',
-
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -86,7 +86,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "my_backend.wsgi.application"
 
-
+CHANNEL_LAYERS= {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
@@ -99,7 +103,8 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '3306',  # MySQL 默认端口是 3306，如果你的 MySQL 使用了其他端口，需要进行相应的修改
         'OPTIONS': {
-            'charset': 'utf8mb4',  # 设置字符集为 utf8mb4，支持存储更多的 Unicode 字符
+            'charset': 'utf8mb4',
+            'init_command': "SET time_zone = '+00:00';",  # 设置数据库时区为 UTC
         },
     }
 }
@@ -134,11 +139,11 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = 'Asia/Shanghai'
 
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
@@ -150,3 +155,4 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+ASGI_APPLICATION="my_backend.asgi.application"

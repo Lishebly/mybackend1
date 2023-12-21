@@ -5,13 +5,14 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST,require_GET
 from django.contrib.auth.decorators import login_required
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.shortcuts import render,HttpResponse
+from django.shortcuts import render, HttpResponse, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 import os
 import json
 import requests
 from django.conf import settings
-from .models import CustomUser,Task
+from .models import CustomUser,Task,TaskMessage
+from django.db.models import Q
 baseurl='http://127.0.0.1:8000'
 def show_image_list(request):
     mylist=[]
@@ -22,12 +23,16 @@ def show_image_list(request):
     # 返回JSON响应
     return JsonResponse({'images': mylist})
 
+def home(request):
+    return render(request,'index.html')
+
 def lunbo(re):
     mylist=[]
     mylist.append({'url': baseurl+f"{settings.STATIC_URL}welcome.png"})
     mylist.append({'url': baseurl+f"{settings.STATIC_URL}NENU1.png"})
     mylist.append({'url': baseurl+f"{settings.STATIC_URL}NENU2.png"})
     return JsonResponse({'images':mylist})
+
 def shouyesilan(re):
     mylist=[]
     mylist.append({'url': baseurl + f"{settings.STATIC_URL}task_pubilish.png"})
@@ -35,11 +40,11 @@ def shouyesilan(re):
     mylist.append({'url': baseurl + f"{settings.STATIC_URL}wait.png"})
     mylist.append({'url': baseurl + f"{settings.STATIC_URL}wait.png"})
     return JsonResponse({'images': mylist})
+
 def showlogo(re):
     mylist=[]
     mylist.append({'url': baseurl + f"{settings.STATIC_URL}logo.png"})
     return JsonResponse({'images': mylist})
-
 
 def wx_login(request):
     # 从前端获取登录凭证 code
@@ -79,7 +84,6 @@ def wx_login(request):
 
     except requests.RequestException as e:
         return JsonResponse({'error': f'请求微信API失败: {str(e)}'}, status=500)
-
 
 @require_GET
 def get_user_info(request):
@@ -139,8 +143,6 @@ def upload_usr_info(request):
     # 处理其他异常
         return JsonResponse({'error': str(e)}, status=400)
 
-
-
 @csrf_exempt
 def upload_images(request):
     if request.method == 'POST':
@@ -158,8 +160,9 @@ def upload_images(request):
 
             # print(filename)
             # 构建图片的访问链接
-            image_url = f"{settings.MEDIA_URL}user_avatars/{image.name}"
-
+            image_url = f"{settings.MEDIA_URL[1:]}user_avatars/{image.name}"
+            print(settings.MEDIA_URL)
+            print(image_url)
             # 返回包含图片链接的JSON响应
             return JsonResponse({'imageUrl': image_url})
         except Exception as e:
@@ -167,7 +170,6 @@ def upload_images(request):
             return JsonResponse({'error': str(e)}, status=400)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
-
 
 @csrf_exempt
 @require_POST
@@ -182,7 +184,7 @@ def task_publish(request):
         reward = data.get('reward', '')
         deadline = data.get('deadline', '')
         openid = data.get('openid', '')
-        print(openid)
+
         # 根据openid找到对应的用户
         user = CustomUser.objects.get(openid=openid)
 
@@ -206,8 +208,8 @@ def task_publish(request):
 def show_task_by_id(request):
     try:
         data = json.loads(request.body)
-        print('1')
-        print(request.body)
+
+
         task_id = data.get('id', '')
 
         # 获取任务信息
@@ -263,18 +265,22 @@ def show_pending_tasks(request):
         tasks_data.append(tmp)
     # 返回 JSON 响应
     return JsonResponse({'pending_tasks': tasks_data})
+
 @csrf_exempt
 def receive(request):
     try:
         data = json.loads(request.body)
 
         task_id = data.get('id', '')
+        openid=data.get('openid','')
+        a_usr=CustomUser.objects.get(openid=openid)
 
         # 获取任务信息
         task = Task.objects.get(id=task_id)
         status_info=task.status
         if status_info=='pending':
             task.status= 'in_progress'
+            task.assignee=a_usr
             task.save()
             response_data={'res':'success','status':task.status}
             return JsonResponse(response_data)
@@ -350,7 +356,7 @@ def my_receive_tasks(request):
         data = json.loads(request.body)
     except json.JSONDecodeError as e:
         return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
-
+    print(data)
     openid = data.get('openid', '')
     usr = CustomUser.objects.get(openid=openid)
     usr_id = usr.id
@@ -374,3 +380,110 @@ def my_receive_tasks(request):
 
     # 返回 JSON 响应
     return JsonResponse(grouped_tasks_data)
+
+@csrf_exempt
+def show_about_me_tasklist(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
+
+    openid = data.get('openid', '')
+    usr = get_object_or_404(CustomUser, openid=openid)
+
+    task1 = Task.objects.filter(creator=usr, assignee__isnull=False)
+    task2 = Task.objects.filter(assignee=usr, creator__isnull=False)
+
+    result = {
+        'data': {
+            'in_progress': {
+                'my_creat': [],
+                'my_receive': [],
+            },
+            'completed': {
+                'my_creat': [],
+                'my_receive': [],
+            }
+        }
+    }
+
+    for e in task1:
+        task_data = {
+            'Taskid': e.id,
+            'name': e.assignee.nickname,
+            'avatar': e.assignee.avatar,
+            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        if e.status == 'in_progress':
+            result['data']['in_progress']['my_creat'].append(task_data)
+        elif e.status == 'completed':
+            result['data']['completed']['my_creat'].append(task_data)
+
+    for e in task2:
+        task_data = {
+            'Taskid': e.id,
+            'name': e.creator.nickname,
+            'avatar': e.creator.avatar,
+            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        if e.status == 'in_progress':
+            result['data']['in_progress']['my_receive'].append(task_data)
+        elif e.status == 'completed':
+            result['data']['completed']['my_receive'].append(task_data)
+
+    return JsonResponse(result)
+
+@csrf_exempt
+def search_by_key(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
+
+    key_word = data.get('kw')
+
+    if key_word:
+        # 使用 Q 对象构建查询条件，标题包含关键词或描述包含关键词的任务都会匹配
+        query_condition = (
+                                  Q(title__icontains=key_word) | Q(description__icontains=key_word)
+                          ) & Q(status__icontains='pending')
+
+        # 执行查询
+        matching_tasks = Task.objects.filter(query_condition)
+
+        # 处理查询结果，例如将结果转换为 JSON 格式返回
+        result = {
+            'data': [{
+                'id': task.id,
+                'title': task.title,
+                'description':task.description,
+                'publish_name': task.creator.nickname,
+                'reward': task.reward,
+                'deadline': task.deadline,
+                'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': task.status,
+            } for task in matching_tasks]
+        }
+
+        return JsonResponse(result)
+    else:
+        return JsonResponse({'error': '关键词不能为空'}, status=400)
+
+def get_history_messages(request):
+    taskid = request.GET.get('taskid', '')
+    task = Task.objects.get(id=taskid)
+    messages = TaskMessage.objects.filter(task=task)
+
+    if messages:
+        res = []
+        for m in messages:
+            temp = {
+                'sender': m.sender,
+                'content': m.content,
+                'timestamp': m.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            res.append(temp)
+
+        return JsonResponse({'messages': res,'error':'success'})
+    else:
+        return JsonResponse({'error': 'fail','message':'no messages'})
