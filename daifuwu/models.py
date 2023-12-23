@@ -27,8 +27,8 @@ class Task(models.Model):
     assignee = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='assigned_tasks', null=True, blank=True)
     ex_phone_number = models.CharField(max_length=15, blank=True)
     last_chat_time = models.DateTimeField(null=True, blank=True)  # 上一次聊天时间
-
-
+    last_chat_content = models.TextField(null=True, blank=True)
+    please = models.BooleanField(default=False)  # 表示接受任务者向发布任务者发送完成请求
 class BaseMessage(models.Model):
     CREATOR = 'creator'
     ASSIGNEE = 'assignee'

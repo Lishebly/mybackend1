@@ -23,6 +23,15 @@ def show_image_list(request):
     # 返回JSON响应
     return JsonResponse({'images': mylist})
 
+def show_tou_list(request):
+    mylist = []
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}tou1.jpeg"})
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}tou2.jpeg"})
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}tou3.jpeg"})
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}tou4.jpeg"})
+
+    # 返回JSON响应
+    return JsonResponse({'images': mylist})
 def home(request):
     return render(request,'index.html')
 
@@ -111,7 +120,11 @@ def get_user_info(request):
 
 @require_GET
 def getrow(request):
-    return JsonResponse( {'url': baseurl + f"{settings.STATIC_URL}arrow.png"})
+    mylist = []
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}green.png"})
+    mylist.append({'url': baseurl + f"{settings.STATIC_URL}red.png"})
+    return JsonResponse({'data':mylist})
+
 
 @require_POST
 @csrf_exempt
@@ -161,12 +174,12 @@ def upload_images(request):
             # print(filename)
             # 构建图片的访问链接
             image_url = f"{settings.MEDIA_URL[1:]}user_avatars/{image.name}"
-            print(settings.MEDIA_URL)
-            print(image_url)
+            # print(settings.MEDIA_URL)
+            # print(image_url)
             # 返回包含图片链接的JSON响应
             return JsonResponse({'imageUrl': image_url})
         except Exception as e:
-            print(str(e))
+            # print(str(e))
             return JsonResponse({'error': str(e)}, status=400)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
@@ -243,7 +256,7 @@ def show_task_by_id(request):
 @require_GET
 def show_pending_tasks(request):
     # 获取所有状态为 'pending' 的任务
-    pending_tasks = Task.objects.filter(status='pending')
+    pending_tasks = Task.objects.filter(status='pending').order_by('-publish_time')
 
     # 将任务数据转换为 JSON 格式
     tasks_data=[]
@@ -326,10 +339,9 @@ def my_publish_tasks(request):
     openid=data.get('openid','')
     usr=CustomUser.objects.get(openid=openid)
     usr_id=usr.id
-    tasks=Task.objects.filter(creator_id=usr_id)
+    tasks=Task.objects.filter(creator_id=usr_id).order_by('-publish_time')
     grouped_tasks_data = {'pending': [], 'in_progress': [], 'completed': []}
     for task in tasks:
-        usr_a = CustomUser.objects.filter(id=task.assignee_id).first()
         tmp = {
             'id': task.id,
             'description': task.description,
@@ -338,11 +350,12 @@ def my_publish_tasks(request):
             'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
             'status': task.status,
             'assignee_id': task.assignee_id,
-            'assignee_name': usr_a.nickname if usr_a else '',
+            'assignee_name': task.assignee.nickname if task.assignee else '',
             'creator_id': task.creator_id,
             'creator_name': usr.nickname,
             'ex_phone_number': task.ex_phone_number,
             'title': task.title,
+            'please': task.please,
         }
         grouped_tasks_data[task.status].append(tmp)
 
@@ -356,14 +369,12 @@ def my_receive_tasks(request):
         data = json.loads(request.body)
     except json.JSONDecodeError as e:
         return JsonResponse({'error': '无法解析JSON数据', 'details': str(e)}, status=400)
-    print(data)
+    # print(data)
     openid = data.get('openid', '')
     usr = CustomUser.objects.get(openid=openid)
-    usr_id = usr.id
-    tasks = Task.objects.filter(assignee_id=usr_id)
+    tasks = Task.objects.filter(assignee=usr).order_by('-publish_time')
     grouped_tasks_data = {'pending': [], 'in_progress': [], 'completed': []}
     for task in tasks:
-        usr_c = CustomUser.objects.filter(id=task.creator_id).first()
         tmp = {
             'id': task.id,
             'description': task.description,
@@ -372,9 +383,10 @@ def my_receive_tasks(request):
             'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
             'status': task.status,
             'creator_id': task.creator_id,
-            'creator_name': usr_c.nickname,
+            'creator_name': task.creator.nickname,
             'ex_phone_number': task.ex_phone_number,
             'title': task.title,
+            'please': task.please,
         }
         grouped_tasks_data[task.status].append(tmp)
 
@@ -391,8 +403,17 @@ def show_about_me_tasklist(request):
     openid = data.get('openid', '')
     usr = get_object_or_404(CustomUser, openid=openid)
 
-    task1 = Task.objects.filter(creator=usr, assignee__isnull=False)
-    task2 = Task.objects.filter(assignee=usr, creator__isnull=False)
+
+    task1 = Task.objects.filter(
+        Q(creator=usr, assignee__isnull=False),
+        Q(last_chat_time__isnull=False) | Q(last_chat_time__isnull=True),
+    ).order_by('-last_chat_time')
+
+
+    task2 = Task.objects.filter(
+        Q(assignee=usr, creator__isnull=False),
+        Q(last_chat_time__isnull=False) | Q(last_chat_time__isnull=True),
+    ).order_by('-last_chat_time')
 
     result = {
         'data': {
@@ -412,7 +433,9 @@ def show_about_me_tasklist(request):
             'Taskid': e.id,
             'name': e.assignee.nickname,
             'avatar': e.assignee.avatar,
-            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S') if e.last_chat_time else '',
+            'last_chat_content': e.last_chat_content,
+            'title': e.title,
         }
         if e.status == 'in_progress':
             result['data']['in_progress']['my_creat'].append(task_data)
@@ -424,7 +447,9 @@ def show_about_me_tasklist(request):
             'Taskid': e.id,
             'name': e.creator.nickname,
             'avatar': e.creator.avatar,
-            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'last_chat_time': e.last_chat_time.strftime('%Y-%m-%d %H:%M:%S') if e.last_chat_time else '',
+            'last_chat_content': e.last_chat_content,
+            'title': e.title,
         }
         if e.status == 'in_progress':
             result['data']['in_progress']['my_receive'].append(task_data)
@@ -487,3 +512,105 @@ def get_history_messages(request):
         return JsonResponse({'messages': res,'error':'success'})
     else:
         return JsonResponse({'error': 'fail','message':'no messages'})
+
+
+def c_a_info(request):
+    taskid = request.GET.get('taskid','')
+    task = Task.objects.get(id=taskid)
+    res = {
+        'creator_url': task.creator.avatar,
+        'creator_name': task.creator.nickname,
+        'assignee_url': task.assignee.avatar,
+        'assignee_name': task.assignee.nickname,
+    }
+    return JsonResponse(res)
+
+
+def select_by_reward(request):
+    # 获取选择的酬劳范围
+    reward = request.GET.get('selectReward', '')
+    # print(reward)
+    if not reward:
+        return JsonResponse({'status': 'error', 'message': 'selectReward parameter is missing'})
+
+    try:
+        reward = reward.split(',')
+        low, high = int(reward[0]), int(reward[1])
+    except (json.JSONDecodeError, IndexError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid selectReward parameter'})
+
+    # 使用酬劳范围筛选状态为 'pending' 的任务
+    pending_tasks = Task.objects.filter(status='pending', reward__range=(low, high)).order_by('-publish_time')
+
+    # 构建任务列表
+    task_list = [{
+        'id': task.id,
+        'description': task.description,
+        'reward': str(task.reward),  # 使用字符串表示 decimal 字段
+        'publish_time': task.publish_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),
+        'status': task.status,
+        'creator_id': task.creator_id,
+        'creator_name': task.creator.nickname,
+        'ex_phone_number': task.ex_phone_number,
+        'title': task.title,
+    } for task in pending_tasks]
+
+    return JsonResponse({'status': 'success', 'tasks': task_list})
+
+def please_finish(request):
+    taskid=request.GET.get('taskid','')
+    if taskid:
+        task=Task.objects.get(id=taskid)
+        task.please = True
+        # print('yes')
+        task.save()
+        return JsonResponse({'status': 'success','content': 'success'})
+    else:
+        return JsonResponse({'status': 'fail','content': 'no taskid'})
+
+
+def show_please_finish(request):
+    openid = request.GET.get('openid', '')
+    se= request.GET.get('se','')
+    se = int(se)
+    # print(se)
+    try:
+        usr = CustomUser.objects.get(openid=openid)
+        tasks = Task.objects.filter(creator=usr, status='in_progress', please=True)
+        if se==1:
+            return JsonResponse({'tasks_length': len(tasks)})
+        # 构造返回的任务数据
+        tasks_data = []
+        for task in tasks:
+            tasks_data.append({
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'reward': task.reward,
+                'deadline': task.deadline.strftime('%Y-%m-%d %H:%M:%S'),  # 将截止时间格式化为字符串
+                'creator_name': task.creator.nickname,
+
+            })
+
+        return JsonResponse({'tasks': tasks_data})
+
+    except CustomUser.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# 确认请求
+def please_finish_c(request):
+    taskid=request.GET.get('taskid','')
+    if taskid:
+        task=Task.objects.get(id=taskid)
+        task.please = True
+        task.status = 'completed'
+
+        task.save()
+        return JsonResponse({'status': 'success','content': 'success'})
+    else:
+        return JsonResponse({'status': 'fail','content': 'no taskid'})

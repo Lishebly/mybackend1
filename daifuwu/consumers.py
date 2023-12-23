@@ -25,6 +25,7 @@ class ChatConsumer(WebsocketConsumer):
             sender = content_dict['sender']
             task=Task.objects.get(id=group)
             task.last_chat_time = timezone.now()
+            task.last_chat_content = content
             task.save()
             TaskMessage.objects.create(
                 sender=sender,

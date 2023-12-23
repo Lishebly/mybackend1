@@ -10,6 +10,7 @@ urlpatterns = [
     path('show/silan',backend.shouyesilan),
     path('show/logo',backend.showlogo),
     path('show/getrow',backend.getrow),
+    path('show/show_tou_list',backend.show_tou_list),
     path('loginByWeixin',backend.wx_login),
     path('get/userinfo',backend.get_user_info),
     path('change/usr_info',backend.upload_usr_info),
@@ -25,6 +26,11 @@ urlpatterns = [
     path('task/show_my_receive_tasks',backend.my_receive_tasks),
     path('task/show_all_about_melist',backend.show_about_me_tasklist),
     path('message/history',backend.get_history_messages),
+    path('message/info',backend.c_a_info),
+    path('task/select',backend.select_by_reward),
+    path('task/please_finish',backend.please_finish),
+    path('show/please_finish',backend.show_please_finish),
+    path('task/please_finish_c',backend.please_finish_c),
 
 ]
 
